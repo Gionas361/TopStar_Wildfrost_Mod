@@ -1,0 +1,254 @@
+using Deadpan.Enums.Engine.Components.Modding; // this allows us to make WildfrostMod's
+using FMOD;
+using FMODUnity;
+using FMODUnityResonance;
+using HarmonyLib;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Text;
+using System.Threading.Tasks;
+using TMPro;
+using UnityEngine;
+using UnityEditor;
+using Rewired.Utils;
+using UnityEngine.Events;
+using Unity.Services.Analytics;
+using UnityEngine.Localization;
+using UnityEngine.Localization.Components;
+using UnityEngine.Localization.Tables;
+using UnityEngine.UI;
+using DeadExtensions;
+
+namespace TopStar
+{
+    //For example, getting to the player's deck would be:  References.PlayerData.inventory.deck.
+    //So, adding a card, say Junk, to your deck would be:  References.PlayerData.inventory.deck.Add(Get<CardData>("Junk").Clone()).
+    public class TopStarMod : WildfrostMod
+    {
+        // Our mod's constructor
+        public TopStarMod(string modDirectory) : base(modDirectory)
+        {
+            Instance = this;
+        }
+
+        public override string GUID => "Gionas361.wildfrost.TopStarMod"; //[creator name].[game name].[mod name] is standard convention. LOWERCASE!
+        public override string[] Depends => new string[] { }; //The GUIDs of other mods that must load before yours. Usually empty
+        public override string Title => "Top Star";
+        public override string Description => "Just making some OC's.";
+
+        // Mod
+        public static TopStarMod Instance; //Instead of Tutorial2, you should write the name of your class instead.
+        public static List<object> assets = new List<object>();    //The list of builders that will build your CardData/StatusEffectData
+        private bool preLoaded = false;                            //Used to prevent redundantly reconstructing our data. Not truly necessary.
+
+        // Tribe making
+        private CardDataBuilder CardCopy(string oldName, string newName) => DataCopy<CardData, CardDataBuilder>(oldName, newName);
+        private ClassDataBuilder TribeCopy(string oldName, string newName) => DataCopy<ClassData, ClassDataBuilder>(oldName, newName);
+        private T DataCopy<Y, T>(string oldName, string newName) where Y : DataFile where T : DataFileBuilder<Y, T>, new()
+        {
+            Y data = Get<Y>(oldName).InstantiateKeepName();
+            data.name = GUID + "." + newName;
+            T builder = data.Edit<Y, T>();
+            builder.Mod = this;
+            return builder;
+        }
+        // Gets tribes
+        private T[] DataList<T>(params string[] names) where T : DataFile => names.Select((s) => TryGet<T>(s)).ToArray();
+
+        // Cards & Tribes
+        private void CreateModAssets()
+        {
+            //Code for tribes
+            //Tribe 0: Caretakers
+            assets.Add(TribeCopy("Clunk", "Draw")                   //Snowdweller = "Basic", Shadmancer = "Magic"
+                .WithFlag("Images/DrawFlag.png")                    //Loads your DrawFlag.png in your Images subfolder of your mod folder
+                .WithSelectSfxEvent(FMODUnity.RuntimeManager.PathToEventReference("event:/sfx/card/draw_multi"))    //Shuffling sound
+                                                                    //The above line may need one of the FMOD references
+            );
+
+            //Code for leaders
+            //Leader 0: Zerk
+            assets.Add(
+                new CardDataBuilder(this).CreateUnit("zerk", "Zerk") //Internally the card's name will be "[GUID].shadeSerpent". In-game, it will be "Shade Serpent".
+                .SetSprites("Zerk.png", "ZerkBg.png")                //See below.
+                .SetStats(8, 3, 3)                                                      //Shade Serpent will have 8 health, 1 attack, and a 3-counter.
+                .WithCardType("Friendly")
+                .FreeModify(                               //Depending on what you are making, FreeModify might be replaced with SubscribeToAfterAllBuildEvent
+                (data) =>                                  //data is assumed to be CardData
+                {
+                    data.createScripts = new CardScript[]  //These scripts run when right before Events.OnCardDataCreated
+                    {
+                        GiveUpgrade(),                     //By our definition, no argument will give a crown
+                        AddRandomHealth(-2,2),
+                        AddRandomDamage(-1,1),
+                        AddRandomCounter(-1,1)
+                    };
+                })
+            );
+
+            //Code for status effects
+
+            //Code for cards
+            //Card 0: Zerl
+            assets.Add(
+                new CardDataBuilder(this).CreateUnit("zerk", "Zerk") //Internally the card's name will be "[GUID].shadeSerpent". In-game, it will be "Shade Serpent".
+                .SetSprites("Zerk.png", "ZerkBg.png")                //See below.
+                .SetStats(8, 3, 3)                                                      //Shade Serpent will have 8 health, 1 attack, and a 3-counter.
+                .WithCardType("Friendly")                                             //All companions are "Friendly". Also, this line is not necessary since CreateUnit already sets the cardType to "Friendly".
+                //.WithFlavour("When Hit Add Frenzy To Self")                      // Due to next line it wont matter anymore
+                .SetStartWithEffect(SStack("When Hit Add Frenzy To Self", 1)) //The only new line
+                .AddPool("GeneralUnitPool")                                             //This puts Shade Serpent in the Shademancer pools. Other choices were "GeneralUnitPool", "SnowUnitPool", "BasicUnitPool", and "ClunkUnitPool".
+                );
+            //Card 1: Starlight
+            assets.Add(
+                new CardDataBuilder(this).CreateUnit("starlight", "Starlight") //Internally the card's name will be "[GUID].shadeSerpent". In-game, it will be "Shade Serpent".
+                .SetSprites("Starlight.png", "StarlightBg.png")                //See below.
+                .SetStats(14, 4, 2)                                                      //Shade Serpent will have 8 health, 1 attack, and a 3-counter.
+                .WithCardType("Friendly")                                             //All companions are "Friendly". Also, this line is not necessary since CreateUnit already sets the cardType to "Friendly".
+                //.WithFlavour("When Hit Apply Attack To Self")                      // Due to next line it wont matter anymore
+                .SetStartWithEffect(SStack("On Turn Apply Attack To Self", 1)) //The only new line
+                .AddPool("GeneralUnitPool")                                             //This puts Shade Serpent in the Shademancer pools. Other choices were "GeneralUnitPool", "SnowUnitPool", "BasicUnitPool", and "ClunkUnitPool".
+                );
+            //Card 2: Khris
+            assets.Add(
+                new CardDataBuilder(this).CreateUnit("khris", "Khris") //Internally the card's name will be "[GUID].shadeSerpent". In-game, it will be "Shade Serpent".
+                .SetSprites("Khris.png", "KhrisBg.png")                //See below.
+                .SetStats(7, 10, 5)                                                      //Shade Serpent will have 8 health, 1 attack, and a 3-counter.
+                .WithCardType("Friendly")                                             //All companions are "Friendly". Also, this line is not necessary since CreateUnit already sets the cardType to "Friendly".
+                //.WithFlavour("When Hit Apply Attack To Self")                      // Due to next line it wont matter anymore
+                .SetStartWithEffect(SStack("When Deployed Apply Block To Self", 2)) //The only new line
+                .SetStartWithEffect(SStack("When Block Lost, Damage Enemies", 3)) //The only new line
+                .SetStartWithEffect(SStack("On Kill Apply Block To Self", 2)) //The only new line
+                .AddPool("GeneralUnitPool")                                             //This puts Shade Serpent in the Shademancer pools. Other choices were "GeneralUnitPool", "SnowUnitPool", "BasicUnitPool", and "ClunkUnitPool".
+                );
+            preLoaded = true;
+        }
+
+
+
+        // Leader methods
+        internal CardScript GiveUpgrade(string name = "Crown") //Give a crown
+        {
+            CardScriptGiveUpgrade script = ScriptableObject.CreateInstance<CardScriptGiveUpgrade>(); //This is the standard way of creating a ScriptableObject
+            script.name = $"Give {name}";                               //Name only appears in the Unity Inspector. It has no other relevance beyond that.
+            script.upgradeData = TryGet<CardUpgradeData>(name);
+            return script;
+        }
+
+        internal CardScript AddRandomHealth(int min, int max) //Boost health by a random amount
+        {
+            CardScriptAddRandomHealth health = ScriptableObject.CreateInstance<CardScriptAddRandomHealth>();
+            health.name = "Random Health";
+            health.healthRange = new Vector2Int(min, max);
+            return health;
+        }
+
+        internal CardScript AddRandomDamage(int min, int max) //Boost damage by a ranom amount
+        {
+            CardScriptAddRandomDamage damage = ScriptableObject.CreateInstance<CardScriptAddRandomDamage>();
+            damage.name = "Give Damage";
+            damage.damageRange = new Vector2Int(min, max);
+            return damage;
+        }
+
+        internal CardScript AddRandomCounter(int min, int max) //Increase counter by a random amount
+        {
+            CardScriptAddRandomCounter counter = ScriptableObject.CreateInstance<CardScriptAddRandomCounter>();
+            counter.name = "Give Counter";
+            counter.counterRange = new Vector2Int(min, max);
+            return counter;
+        }
+
+
+
+        // Basic Status effect getter
+        public T TryGet<T>(string name) where T : DataFile
+        {
+            T data;
+            if (typeof(StatusEffectData).IsAssignableFrom(typeof(T)))
+                data = base.Get<StatusEffectData>(name) as T;
+            else if (typeof(KeywordData).IsAssignableFrom(typeof(T)))
+                data = base.Get<KeywordData>(name.ToLower()) as T;
+            else
+                data = base.Get<T>(name);
+
+            if (data == null)
+                throw new Exception($"TryGet Error: Could not find a [{typeof(T).Name}] with the name [{name}] or [{Extensions.PrefixGUID(name, this)}]");
+
+            return data;
+        }
+        public CardData.StatusEffectStacks SStack(string name, int amount) => new CardData.StatusEffectStacks(TryGet<StatusEffectData>(name), amount);
+        //See above
+        //Note: you need to add the reference DeadExtensions.dll in order to use InstantiateKeepName(). 
+        public StatusEffectDataBuilder StatusCopy(string oldName, string newName)
+        {
+            StatusEffectData data = TryGet<StatusEffectData>(oldName).InstantiateKeepName();
+            data.name = GUID + "." + newName;
+            data.targetConstraints = new TargetConstraint[0];
+            StatusEffectDataBuilder builder = data.Edit<StatusEffectData, StatusEffectDataBuilder>();
+            builder.Mod = this;
+            return builder;
+        }
+
+
+
+        //Loading and Unloading
+        protected override void Load()
+        {
+            Instance = this;
+            if (!preLoaded) CreateModAssets(); //preLoaded makes sure that the builders are not made again on the 2nd load.
+            base.Load();                       //Actual loading
+            GameMode gameMode = TryGet<GameMode>("GameModeNormal"); //GameModeNormal is the standard game mode. 
+            gameMode.classes = gameMode.classes.Append(TryGet<ClassData>("Draw")).ToArray();
+        }
+        protected override void Unload()
+        {
+            base.Unload();
+
+            GameMode gameMode = TryGet<GameMode>("GameModeNormal");
+            gameMode.classes = RemoveNulls(gameMode.classes); //Without this, a non-restarted game would crash on tribe selection
+            UnloadFromClasses();                               //This tutorial doesn't need it, but it doesn't hurt to clean the pools
+
+        }
+        //Call this method in Unload.
+        public void UnloadFromClasses()
+        {
+            List<ClassData> tribes = AddressableLoader.GetGroup<ClassData>("ClassData");
+            foreach (ClassData tribe in tribes)
+            {
+                if (tribe == null || tribe.rewardPools == null) { continue; } //This isn't even a tribe; skip it.
+
+                foreach (RewardPool pool in tribe.rewardPools)
+                {
+                    if (pool == null) { continue; }; //This isn't even a reward pool; skip it.
+
+                    pool.list.RemoveAllWhere((item) => item == null || item.ModAdded == this); //Find and remove everything that needs to be removed.
+                }
+            }
+
+
+        }
+        // Removes nulls
+        internal T[] RemoveNulls<T>(T[] data) where T : DataFile
+        {
+            List<T> list = data.ToList();
+            list.RemoveAll(x => x == null || x.ModAdded == this);
+            return list.ToArray();
+        }
+
+
+
+        //Credits to Hopeful for this AddAssets code.
+        public override List<T> AddAssets<T, Y>()
+        {
+            if (assets.OfType<T>().Any()) Debug.LogWarning($"[{Title}] adding {typeof(Y).Name}s: {assets.OfType<T>()}");
+            return assets.OfType<T>().ToList();
+        }
+    }
+
+    //Effects
+}

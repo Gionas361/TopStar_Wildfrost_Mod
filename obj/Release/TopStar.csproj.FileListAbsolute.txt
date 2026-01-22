@@ -1,0 +1,2 @@
+S:\SteamLibrary\steamapps\common\Wildfrost\Modded\Wildfrost_Data\StreamingAssets\Mods\TopStar_WildMod\obj\Release\TopStar.csproj.AssemblyReference.cache
+S:\SteamLibrary\steamapps\common\Wildfrost\Modded\Wildfrost_Data\StreamingAssets\Mods\TopStar_WildMod\obj\Release\TopStar.csproj.CoreCompileInputs.cache
